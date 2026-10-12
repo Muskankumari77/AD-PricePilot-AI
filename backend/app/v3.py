@@ -29,8 +29,8 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from backend.app.main import app
-from backend.app.config import COMBINED_PROCESSED, ROOT
+from app.main import app
+from app.config import COMBINED_PROCESSED, ROOT
 from backend.app.ml.demand_forecasting import forecast
 
 
