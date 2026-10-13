@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"> 
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PricePilot AI — Revenue Intelligence</title>
@@ -55,32 +55,271 @@ main{padding:30px clamp(18px,3vw,42px);min-width:0}.topbar{display:flex;justify-
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const inr=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0}),num=n=>Number(n||0).toLocaleString('en-IN');
 const PAL=['#d96b32','#e7a23b','#34745b','#b95548','#7a6251','#9b8b72'];
+
+// Render backend URL
+const API_BASE='https://ad-pricepilot-ai6.onrender.com';
+
 let TOKEN='',USER=null,DAYS=30,OD=30,REG=false,CH={};
-const store={get:k=>{try{return localStorage.getItem(k)||''}catch{return ''}},set:(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch{}}};
-async function api(p,o={}){const r=await fetch('/api/v3'+p,{...o,headers:{'Content-Type':'application/json',...(TOKEN&&{Authorization:'Bearer '+TOKEN})}});let j;try{j=await r.json()}catch{throw new Error('Server returned an invalid response.')}if(!r.ok)throw new Error(typeof j.detail==='string'?j.detail:'Something went wrong.');return j}
+
+const store={
+  get:k=>{try{return localStorage.getItem(k)||''}catch{return ''}},
+  set:(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch{}}
+};
+
+// All Milestone 3 API requests go to Render
+async function api(p,o={}){
+  const r=await fetch(API_BASE+'/api/v3'+p,{
+    ...o,
+    headers:{
+      'Content-Type':'application/json',
+      ...(TOKEN&&{Authorization:'Bearer '+TOKEN}),
+      ...(o.headers||{})
+    }
+  });
+  let j;
+  try{j=await r.json()}
+  catch{throw new Error('Server returned a non-JSON response. Check Render logs.')}
+  if(!r.ok)throw new Error(typeof j.detail==='string'?j.detail:`Request failed (${r.status})`);
+  return j;
+}
+
 const fill=(u,p)=>{$('#un').value=u;$('#pw').value=p};
-function toggleReg(){REG=!REG;$('#ft').textContent=REG?'Create account':'Sign in';$('#go').textContent=REG?'Create account':'Sign in';$('#sw').textContent=REG?'Have an account? Sign in':'New here? Create a user account';$('#err').textContent=''}
-async function auth(){try{$('#err').textContent='';const r=await api('/auth/'+(REG?'register':'login'),{method:'POST',body:JSON.stringify({username:$('#un').value.trim(),password:$('#pw').value})});TOKEN=r.token;USER=r.user;store.set('pp_t',TOKEN);start()}catch(e){$('#err').textContent=e.message}}
-function logout(){store.set('pp_t','');TOKEN='';location.reload()}
-const navUser=[['dashboard','▦','Dashboard'],['product','◈','Product intelligence'],['chat','✦','AI analyst'],['reports','▤','Reports']];
+
+function toggleReg(){
+  REG=!REG;
+  $('#ft').textContent=REG?'Create account':'Sign in';
+  $('#go').textContent=REG?'Create account':'Sign in';
+  $('#sw').textContent=REG?'Have an account? Sign in':'New here? Create a user account';
+  $('#err').textContent='';
+}
+
+async function auth(){
+  try{
+    $('#err').textContent='';
+    const r=await api('/auth/'+(REG?'register':'login'),{
+      method:'POST',
+      body:JSON.stringify({
+        username:$('#un').value.trim(),
+        password:$('#pw').value
+      })
+    });
+    TOKEN=r.token;
+    USER=r.user;
+    store.set('pp_t',TOKEN);
+    start();
+  }catch(e){
+    $('#err').textContent=e.message;
+  }
+}
+
+function logout(){
+  store.set('pp_t','');
+  TOKEN='';
+  location.reload();
+}
+
+const navUser=[
+  ['dashboard','▦','Dashboard'],
+  ['product','◈','Product intelligence'],
+  ['chat','✦','AI analyst'],
+  ['reports','▤','Reports']
+];
 const navAdmin=[...navUser,['users','♙','Users'],['activity','◷','Activity']];
-function buildNav(){const items=USER.role==='admin'?navAdmin:navUser;$('#nav').innerHTML=items.map(([v,i,t])=>`<button data-v="${v}"><span class="ico">${i}</span>${t}</button>`).join('');$('#nav button:first-child').classList.add('on');$('#side-role').textContent=USER.role==='admin'?'Administrator workspace':'Business user workspace';}
-async function start(){$('#login').hidden=true;$('#app').hidden=false;$('#mn').textContent=USER.username;$('#mode').textContent=USER.role==='admin'?'Full platform access':'Business intelligence access';$('#mr').textContent=USER.role;$('#mr').className='badge '+USER.role;buildNav();show('dashboard');loadProducts();bot('Hello '+USER.username+'! I can explain revenue, forecasts, categories and product pricing.');$('#sug').innerHTML=['Forecast next 30 days','What is total revenue?','Top products','Revenue by category'].map(t=>`<button onclick="ask(${JSON.stringify(t)})">${t}</button>`).join('')}
-const T={dashboard:['Command center','A decision view for revenue, demand and pricing'],product:['Product intelligence','Demand forecast + pricing recommendation for a selected product'],chat:['AI revenue analyst','Ask questions in plain language using business data'],reports:['Reports','Export and review decision-ready business snapshots'],users:['Access management','Control accounts and roles'],activity:['Workspace activity','See what users and AI features are doing']};
-function show(v){$$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));$$('main section').forEach(s=>s.hidden=s.id!=='v-'+v);$('#title').textContent=T[v][0];$('#sub').textContent=T[v][1];if(v==='dashboard')overview();if(v==='product')loadProducts();if(v==='reports'){loadReport();loadReportHistory()}if(v==='users')loadUsers();if(v==='activity')loadActivity()}
-$('#nav').onclick=e=>{const b=e.target.closest('button');if(b)show(b.dataset.v)};$('#ds').onchange=()=>{const v=$('#nav button.on')?.dataset.v;if(v==='dashboard')overview();if(v==='product')loadProducts();if(v==='reports')loadReport()};
-function draw(id,cfg){const el=document.getElementById(id);if(!el)return;if(CH[id])CH[id].destroy();CH[id]=new Chart(el,{...cfg,options:{responsive:true,maintainAspectRatio:false,...cfg.options}})}
-const money={ticks:{callback:v=>v>=1e7?(v/1e7).toFixed(1)+'Cr':v>=1e5?(v/1e5).toFixed(1)+'L':v>=1e3?(v/1e3)+'k':v},grid:{color:'#ece7de'},border:{display:false}};
-async function overview(){const ds=$('#ds').value,q='?dataset='+encodeURIComponent(ds);try{const[k,c,t,m]=await Promise.all([api('/kpis'+q),api('/revenue/categories'+q),api('/revenue/top-products'+q),api('/revenue/monthly'+q)]);$('#k1').textContent=inr(k.total_revenue);$('#k2').textContent=inr(k.last30);$('#k3').textContent=num(k.units);$('#k4').textContent=num(k.products);$('#kg').textContent=(k.growth_pct>=0?'▲ ':'▼ ')+Math.abs(k.growth_pct)+'% vs previous 30 days';draw('c2',{type:'doughnut',data:{labels:c.labels,datasets:[{data:c.values,backgroundColor:PAL,borderWidth:3,borderColor:'#fffdf9'}]},options:{cutout:'62%',plugins:{legend:{position:'right',labels:{boxWidth:10,padding:12}}}}});draw('c3',{type:'bar',data:{labels:t.labels,datasets:[{data:t.values,backgroundColor:PAL,borderRadius:6}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:money,y:{grid:{display:false}}}}});draw('c4',{type:'line',data:{labels:m.labels,datasets:[{data:m.values,borderColor:'#34745b',backgroundColor:'#34745b18',fill:true,tension:.35,pointRadius:0}]},options:{plugins:{legend:{display:false}},scales:{y:money,x:{grid:{display:false}}}}});await loadForecast();await loadRevenueMap()}catch(e){console.error(e)}}
+
+function buildNav(){
+  const items=USER.role==='admin'?navAdmin:navUser;
+  $('#nav').innerHTML=items.map(([v,i,t])=>
+    `<button data-v="${v}"><span class="ico">${i}</span>${t}</button>`
+  ).join('');
+  $('#nav button:first-child').classList.add('on');
+  $('#side-role').textContent=USER.role==='admin'
+    ?'Administrator workspace':'Business user workspace';
+}
+
+async function start(){
+  $('#login').hidden=true;
+  $('#app').hidden=false;
+  $('#mn').textContent=USER.username;
+  $('#mode').textContent=USER.role==='admin'
+    ?'Full platform access':'Business intelligence access';
+  $('#mr').textContent=USER.role;
+  $('#mr').className='badge '+USER.role;
+  buildNav();
+  show('dashboard');
+  loadProducts();
+  bot('Hello '+USER.username+'! I can explain revenue, forecasts, categories and product pricing.');
+  $('#sug').innerHTML=[
+    'Forecast next 30 days',
+    'What is total revenue?',
+    'Top products',
+    'Revenue by category'
+  ].map(t=>`<button onclick="ask(${JSON.stringify(t)})">${t}</button>`).join('');
+}
+
+const T={
+  dashboard:['Command center','A decision view for revenue, demand and pricing'],
+  product:['Product intelligence','Demand forecast + pricing recommendation for a selected product'],
+  chat:['AI revenue analyst','Ask questions in plain language using business data'],
+  reports:['Reports','Export and review decision-ready business snapshots'],
+  users:['Access management','Control accounts and roles'],
+  activity:['Workspace activity','See what users and AI features are doing']
+};
+
+function show(v){
+  $$('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  $$('main section').forEach(s=>s.hidden=s.id!=='v-'+v);
+  $('#title').textContent=T[v][0];
+  $('#sub').textContent=T[v][1];
+
+  if(v==='dashboard')overview();
+  if(v==='product')loadProducts();
+  if(v==='reports'){loadReport();loadReportHistory()}
+  if(v==='users')loadUsers();
+  if(v==='activity')loadActivity();
+}
+
+$('#nav').onclick=e=>{
+  const b=e.target.closest('button');
+  if(b)show(b.dataset.v);
+};
+
+$('#ds').onchange=()=>{
+  const v=$('#nav button.on')?.dataset.v;
+  if(v==='dashboard')overview();
+  if(v==='product')loadProducts();
+  if(v==='reports')loadReport();
+};
+
+function draw(id,cfg){
+  const el=document.getElementById(id);
+  if(!el)return;
+  if(CH[id])CH[id].destroy();
+  CH[id]=new Chart(el,{
+    ...cfg,
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      ...cfg.options
+    }
+  });
+}
+
+const money={
+  ticks:{
+    callback:v=>v>=1e7?(v/1e7).toFixed(1)+'Cr':
+      v>=1e5?(v/1e5).toFixed(1)+'L':
+      v>=1e3?(v/1e3)+'k':v
+  },
+  grid:{color:'#ece7de'},
+  border:{display:false}
+};
+
+async function overview(){
+  const ds=$('#ds').value;
+  const q='?dataset='+encodeURIComponent(ds);
+
+  try{
+    const [k,c,t,m]=await Promise.all([
+      api('/kpis'+q),
+      api('/revenue/categories'+q),
+      api('/revenue/top-products'+q),
+      api('/revenue/monthly'+q)
+    ]);
+
+    $('#k1').textContent=inr(k.total_revenue);
+    $('#k2').textContent=inr(k.last30);
+    $('#k3').textContent=num(k.units);
+    $('#k4').textContent=num(k.products);
+    $('#kg').textContent=(k.growth_pct>=0?'▲ ':'▼ ')+
+      Math.abs(k.growth_pct)+'% vs previous 30 days';
+
+    draw('c2',{
+      type:'doughnut',
+      data:{
+        labels:c.labels,
+        datasets:[{
+          data:c.values,
+          backgroundColor:PAL,
+          borderWidth:3,
+          borderColor:'#fffdf9'
+        }]
+      },
+      options:{
+        cutout:'62%',
+        plugins:{
+          legend:{
+            position:'right',
+            labels:{boxWidth:10,padding:12}
+          }
+        }
+      }
+    });
+
+    draw('c3',{
+      type:'bar',
+      data:{
+        labels:t.labels,
+        datasets:[{
+          data:t.values,
+          backgroundColor:PAL,
+          borderRadius:6
+        }]
+      },
+      options:{
+        indexAxis:'y',
+        plugins:{legend:{display:false}},
+        scales:{x:money,y:{grid:{display:false}}}
+      }
+    });
+
+    draw('c4',{
+      type:'line',
+      data:{
+        labels:m.labels,
+        datasets:[{
+          data:m.values,
+          borderColor:'#34745b',
+          backgroundColor:'#34745b18',
+          fill:true,
+          tension:.35,
+          pointRadius:0
+        }]
+      },
+      options:{
+        plugins:{legend:{display:false}},
+        scales:{y:money,x:{grid:{display:false}}}
+      }
+    });
+
+    await loadForecast();
+    await loadRevenueMap();
+
+  }catch(e){
+    console.error('Dashboard API error:',e);
+  }
+}
+
+// Country revenue map: data comes from Render
 async function loadRevenueMap(){
   const el=document.getElementById('revenueMap');
-  if(!el || typeof Plotly==='undefined')return;
+
+  if(!el)return;
+
+  if(typeof Plotly==='undefined'){
+    el.innerHTML='<div class="empty">Map library failed to load. Refresh the page.</div>';
+    return;
+  }
+
+  el.innerHTML='<div class="empty">Loading country revenue map...</div>';
+
   try{
     const d=await api('/revenue/countries?dataset=Online%20Retail');
-    if(!d.labels || !d.labels.length){
+
+    if(!d.labels || !d.labels.length || !d.values || !d.values.length){
       el.innerHTML='<div class="empty">No country-level revenue data available.</div>';
       return;
     }
+
     const trace={
       type:'choropleth',
       locationmode:'country names',
@@ -98,6 +337,7 @@ async function loadRevenueMap(){
       marker:{line:{color:'#fff',width:.5}},
       colorbar:{title:'Revenue'}
     };
+
     const layout={
       geo:{
         showframe:false,
@@ -114,29 +354,309 @@ async function loadRevenueMap(){
       plot_bgcolor:'rgba(0,0,0,0)',
       font:{family:'DM Sans, sans-serif',color:'#191b1a'}
     };
+
     await Plotly.newPlot(el,[trace],layout,{
       responsive:true,
       displayModeBar:false
     });
+
   }catch(e){
     console.error('Revenue map error:',e);
-    el.innerHTML='<div class="empty">Country map unavailable. Check the Online Retail country data.</div>';
+    el.innerHTML='<div class="empty">Country map unavailable. Check the Render country-revenue API and authentication.</div>';
   }
 }
 
-async function loadForecast(){const f=await api(`/revenue/forecast?dataset=${encodeURIComponent($('#ds').value)}&days=${DAYS}`);$('#f1').textContent=inr(f.total);$('#f2').textContent=inr(f.avg_daily);$('#f3').textContent=f.trend;$('#f4').textContent=f.confidence+'%';const H=f.history,F=f.forecast,n=H.labels.length,pad=a=>[...Array(n).fill(null),...a],lab=[...H.labels,...F.labels];draw('c1',{type:'line',data:{labels:lab,datasets:[{label:'Actual',data:[...H.values,...Array(F.labels.length).fill(null)],borderColor:'#202522',borderWidth:2.5,pointRadius:0,tension:.25},{label:'Forecast',data:pad(F.values),borderColor:'#d96b32',borderWidth:3,borderDash:[7,5],pointRadius:0,tension:.25},{label:'Upper range',data:pad(F.high),borderColor:'#e7a23b55',borderWidth:1,pointRadius:0},{label:'Lower range',data:pad(F.low),borderColor:'#e7a23b55',borderWidth:1,pointRadius:0}]},options:{interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{filter:i=>['Actual','Forecast'].includes(i.text)}}},scales:{y:money,x:{grid:{display:false},ticks:{maxTicksLimit:8}}}}});const sign=f.trend==='Increasing'?'positive growth':'stable performance';$('#insight-title').textContent='Decision insight';$('#insight-text').textContent=`The ${DAYS}-day model expects ${inr(f.total)} in revenue with ${f.confidence}% confidence, indicating ${sign}. Use Product intelligence when you want to act on a specific SKU.`;if(USER.role==='admin')loadAdminStats()}
-function bindSeg(id,fn){$(id).onclick=e=>{if(!e.target.dataset.d)return;$$(`${id} button`).forEach(b=>b.classList.toggle('on',b===e.target));fn(+e.target.dataset.d)}}bindSeg('#seg',d=>{DAYS=d;loadForecast()});bindSeg('#seg2',d=>{OD=d});
-async function loadAdminStats(){try{const s=await api('/admin/stats');$('#admin-panel').hidden=false;$('#as1').textContent=num(s.users);$('#as2').textContent=num(s.ai_queries);$('#as3').textContent=num(s.reports);$('#as4').textContent=num(s.forecast_runs)}catch{$('#admin-panel').hidden=true}}
-async function loadProducts(){try{const p=await fetch('/api/products/'+encodeURIComponent($('#ds').value),{headers:{Authorization:'Bearer '+TOKEN}}).then(r=>r.json());if(!Array.isArray(p))throw 0;$('#pp').innerHTML=p.slice(0,300).map(x=>`<option value="${x.product_id}">${x.product_id} · ${x.product_name}</option>`).join('')}catch{$('#pp').innerHTML='<option value="P00001">P00001 · Wireless Earbuds</option><option value="P00002">P00002 · Running Shoes</option>'}}
-async function outlook(){const pid=$('#pp').value;try{const r=await api(`/product/${encodeURIComponent($('#ds').value)}/${encodeURIComponent(pid)}?days=${OD}`),p=r.price,f=r.forecast;$('#ol').innerHTML=[['Expected units',num(f.predicted_units)],['Revenue at current price',inr(r.revenue_forecast)],['Model confidence',f.confidence_score+'%'],['Demand trend',f.trend]].map(([a,b])=>`<div class="mini"><span>${a}</span><b>${b}</b></div>`).join('');$('#current-price').textContent=inr(p.current_price);$('#recommended-price').textContent=inr(p.recommended_price);$('#price-delta').textContent=(p.price_change_pct>=0?'+':'')+p.price_change_pct+'% recommended change';$('#olmsg').textContent=`At the recommended price, estimated revenue is ${inr(r.revenue_at_recommended)} for the selected horizon. Estimated elasticity: ${p.estimated_elasticity}. This gives a measurable reason for the pricing decision.`}catch(e){$('#olmsg').textContent=e.message}}
-const bot=t=>{$('#msgs').insertAdjacentHTML('beforeend',`<div class="bubble bot"></div>`);$('#msgs').lastChild.textContent=t;$('#msgs').scrollTop=1e9};const you=t=>{$('#msgs').insertAdjacentHTML('beforeend',`<div class="bubble user"></div>`);$('#msgs').lastChild.textContent=t;$('#msgs').scrollTop=1e9};
-async function ask(t){t=t||$('#ci').value.trim();if(!t)return;$('#ci').value='';you(t);try{const r=await api('/chat',{method:'POST',body:JSON.stringify({message:t,dataset:$('#ds').value})});bot(r.answer);$('#chat-engine').textContent=r.engine==='groq-openai'?'Groq · OpenAI compatible':'Built-in fallback';}catch(e){bot(e.message)}}
-async function loadReport(){const ds=$('#ds').value,q='?dataset='+encodeURIComponent(ds),[k,a,b,c]=await Promise.all([api('/kpis'+q),...[7,30,90].map(d=>api(`/revenue/forecast${q}&days=${d}`))]);$('#rt').innerHTML='<tr><th>Measure</th><th>Value</th></tr>'+[['Total revenue',inr(k.total_revenue)],['Last 30 days',inr(k.last30)],['Growth vs previous',k.growth_pct+'%'],['Units sold',num(k.units)],['Products tracked',num(k.products)],... [a,b,c].map(f=>[`Forecast ${f.days}D`,`${inr(f.total)} · ${f.trend} · ${f.confidence}%`])].map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`).join('')}
-async function loadReportHistory(){try{const h=await api('/reports/history');$('#rh').innerHTML='<tr><th>Dataset</th><th>Type</th><th>Created</th></tr>'+h.map(x=>`<tr><td>${x.dataset}</td><td>${x.report_type}</td><td>${new Date(x.created).toLocaleString()}</td></tr>`).join('')||'<tr><td colspan="3" class="empty">No reports yet.</td></tr>'}catch(e){$('#rh').innerHTML='<tr><td class="empty">Unable to load history.</td></tr>'}}
-async function dl(){const r=await fetch('/api/v3/report.csv?dataset='+encodeURIComponent($('#ds').value),{headers:{Authorization:'Bearer '+TOKEN}});if(!r.ok){alert('Unable to export report');return}const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='pricepilot_report.csv';a.click();loadReportHistory()}
-async function loadUsers(){const u=await api('/admin/users');$('#ut').innerHTML='<tr><th>Username</th><th>Joined</th><th>Role</th><th>Access</th></tr>'+u.map(x=>`<tr><td><b>${x.username}</b></td><td>${x.created}</td><td><span class="pill ${x.role}">${x.role}</span></td><td><select onchange="setRole('${x.username}',this.value)" ${x.username===USER.username?'disabled':''}><option ${x.role==='admin'?'selected':''}>admin</option><option ${x.role==='user'?'selected':''}>user</option></select></td></tr>`).join('')}
-async function setRole(n,r){try{await api(`/admin/users/${encodeURIComponent(n)}/role?role=${r}`,{method:'POST'});loadUsers();loadActivity()}catch(e){alert(e.message)}}
-async function loadActivity(){const u=USER.role==='admin'?await api('/admin/activity'):await api('/activity/me');$('#at').innerHTML=USER.role==='admin'?'<tr><th>User</th><th>Role</th><th>Action</th><th>Dataset</th><th>Details</th><th>Time</th></tr>':'<tr><th>Action</th><th>Dataset</th><th>Details</th><th>Time</th></tr>';$('#at').innerHTML+=u.map(x=>USER.role==='admin'?`<tr><td>${x.username}</td><td><span class="pill ${x.role}">${x.role}</span></td><td>${x.action}</td><td>${x.dataset||'—'}</td><td>${x.details||'—'}</td><td>${new Date(x.created).toLocaleString()}</td></tr>`:`<tr><td>${x.action}</td><td>${x.dataset||'—'}</td><td>${x.details||'—'}</td><td>${new Date(x.created).toLocaleString()}</td></tr>`).join('')}
-(async()=>{TOKEN=store.get('pp_t');if(TOKEN)try{USER=await api('/auth/me');start()}catch{store.set('pp_t','')}})();
+async function loadForecast(){
+  const f=await api(
+    `/revenue/forecast?dataset=${encodeURIComponent($('#ds').value)}&days=${DAYS}`
+  );
+
+  $('#f1').textContent=inr(f.total);
+  $('#f2').textContent=inr(f.avg_daily);
+  $('#f3').textContent=f.trend;
+  $('#f4').textContent=f.confidence+'%';
+
+  const H=f.history,F=f.forecast,n=H.labels.length;
+  const pad=a=>[...Array(n).fill(null),...a];
+  const lab=[...H.labels,...F.labels];
+
+  draw('c1',{
+    type:'line',
+    data:{
+      labels:lab,
+      datasets:[
+        {
+          label:'Actual',
+          data:[...H.values,...Array(F.labels.length).fill(null)],
+          borderColor:'#202522',
+          borderWidth:2.5,
+          pointRadius:0,
+          tension:.25
+        },
+        {
+          label:'Forecast',
+          data:pad(F.values),
+          borderColor:'#d96b32',
+          borderWidth:3,
+          borderDash:[7,5],
+          pointRadius:0,
+          tension:.25
+        },
+        {
+          label:'Upper range',
+          data:pad(F.high),
+          borderColor:'#e7a23b55',
+          borderWidth:1,
+          pointRadius:0
+        },
+        {
+          label:'Lower range',
+          data:pad(F.low),
+          borderColor:'#e7a23b55',
+          borderWidth:1,
+          pointRadius:0
+        }
+      ]
+    },
+    options:{
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{
+          labels:{
+            filter:i=>['Actual','Forecast'].includes(i.text)
+          }
+        }
+      },
+      scales:{
+        y:money,
+        x:{grid:{display:false},ticks:{maxTicksLimit:8}}
+      }
+    }
+  });
+
+  const sign=f.trend==='Increasing'?'positive growth':'stable performance';
+  $('#insight-title').textContent='Decision insight';
+  $('#insight-text').textContent=
+    `The ${DAYS}-day model expects ${inr(f.total)} in revenue with ${f.confidence}% confidence, indicating ${sign}. Use Product intelligence when you want to act on a specific SKU.`;
+
+  if(USER.role==='admin')loadAdminStats();
+}
+
+function bindSeg(id,fn){
+  $(id).onclick=e=>{
+    if(!e.target.dataset.d)return;
+    $$(`${id} button`).forEach(b=>b.classList.toggle('on',b===e.target));
+    fn(+e.target.dataset.d);
+  };
+}
+bindSeg('#seg',d=>{DAYS=d;loadForecast()});
+bindSeg('#seg2',d=>{OD=d});
+
+async function loadAdminStats(){
+  try{
+    const s=await api('/admin/stats');
+    $('#admin-panel').hidden=false;
+    $('#as1').textContent=num(s.users);
+    $('#as2').textContent=num(s.ai_queries);
+    $('#as3').textContent=num(s.reports);
+    $('#as4').textContent=num(s.forecast_runs);
+  }catch{
+    $('#admin-panel').hidden=true;
+  }
+}
+
+// Product list also uses Render
+async function loadProducts(){
+  try{
+    const r=await fetch(
+      API_BASE+'/api/products/'+encodeURIComponent($('#ds').value),
+      {headers:{Authorization:'Bearer '+TOKEN}}
+    );
+
+    if(!r.ok)throw new Error('Product API request failed: '+r.status);
+
+    const p=await r.json();
+    if(!Array.isArray(p))throw new Error('Unexpected product data');
+
+    $('#pp').innerHTML=p.slice(0,300).map(x=>
+      `<option value="${x.product_id}">${x.product_id} · ${x.product_name}</option>`
+    ).join('');
+
+  }catch(e){
+    console.error('Products API error:',e);
+    $('#pp').innerHTML=
+      '<option value="P00001">P00001 · Wireless Earbuds</option>'+
+      '<option value="P00002">P00002 · Running Shoes</option>';
+  }
+}
+
+async function outlook(){
+  const pid=$('#pp').value;
+
+  try{
+    const r=await api(
+      `/product/${encodeURIComponent($('#ds').value)}/${encodeURIComponent(pid)}?days=${OD}`
+    );
+
+    const p=r.price,f=r.forecast;
+
+    $('#ol').innerHTML=[
+      ['Expected units',num(f.predicted_units)],
+      ['Revenue at current price',inr(r.revenue_forecast)],
+      ['Model confidence',f.confidence_score+'%'],
+      ['Demand trend',f.trend]
+    ].map(([a,b])=>`<div class="mini"><span>${a}</span><b>${b}</b></div>`).join('');
+
+    $('#current-price').textContent=inr(p.current_price);
+    $('#recommended-price').textContent=inr(p.recommended_price);
+    $('#price-delta').textContent=
+      (p.price_change_pct>=0?'+':'')+p.price_change_pct+'% recommended change';
+
+    $('#olmsg').textContent=
+      `At the recommended price, estimated revenue is ${inr(r.revenue_at_recommended)} for the selected horizon. Estimated elasticity: ${p.estimated_elasticity}. This gives a measurable reason for the pricing decision.`;
+
+  }catch(e){
+    $('#olmsg').textContent=e.message;
+  }
+}
+
+const bot=t=>{
+  $('#msgs').insertAdjacentHTML('beforeend','<div class="bubble bot"></div>');
+  $('#msgs').lastChild.textContent=t;
+  $('#msgs').scrollTop=1e9;
+};
+
+const you=t=>{
+  $('#msgs').insertAdjacentHTML('beforeend','<div class="bubble user"></div>');
+  $('#msgs').lastChild.textContent=t;
+  $('#msgs').scrollTop=1e9;
+};
+
+async function ask(t){
+  t=t||$('#ci').value.trim();
+  if(!t)return;
+  $('#ci').value='';
+  you(t);
+
+  try{
+    const r=await api('/chat',{
+      method:'POST',
+      body:JSON.stringify({message:t,dataset:$('#ds').value})
+    });
+
+    bot(r.answer);
+    $('#chat-engine').textContent=
+      r.engine==='groq-openai'?'Groq · OpenAI compatible':'Built-in fallback';
+
+  }catch(e){
+    bot(e.message);
+  }
+}
+
+async function loadReport(){
+  const ds=$('#ds').value;
+  const q='?dataset='+encodeURIComponent(ds);
+
+  const [k,a,b,c]=await Promise.all([
+    api('/kpis'+q),
+    ...[7,30,90].map(d=>api(`/revenue/forecast${q}&days=${d}`))
+  ]);
+
+  $('#rt').innerHTML='<tr><th>Measure</th><th>Value</th></tr>'+
+    [
+      ['Total revenue',inr(k.total_revenue)],
+      ['Last 30 days',inr(k.last30)],
+      ['Growth vs previous',k.growth_pct+'%'],
+      ['Units sold',num(k.units)],
+      ['Products tracked',num(k.products)],
+      ...[a,b,c].map(f=>[
+        `Forecast ${f.days}D`,
+        `${inr(f.total)} · ${f.trend} · ${f.confidence}%`
+      ])
+    ].map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`).join('');
+}
+
+async function loadReportHistory(){
+  try{
+    const h=await api('/reports/history');
+    $('#rh').innerHTML=
+      '<tr><th>Dataset</th><th>Type</th><th>Created</th></tr>'+
+      h.map(x=>`<tr><td>${x.dataset}</td><td>${x.report_type}</td><td>${new Date(x.created).toLocaleString()}</td></tr>`).join('')||
+      '<tr><td colspan="3" class="empty">No reports yet.</td></tr>';
+  }catch(e){
+    $('#rh').innerHTML='<tr><td class="empty">Unable to load history.</td></tr>';
+  }
+}
+
+// CSV export uses Render
+async function dl(){
+  try{
+    const r=await fetch(
+      API_BASE+'/api/v3/report.csv?dataset='+encodeURIComponent($('#ds').value),
+      {headers:{Authorization:'Bearer '+TOKEN}}
+    );
+
+    if(!r.ok)throw new Error('Unable to export report: '+r.status);
+
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(await r.blob());
+    a.download='pricepilot_report.csv';
+    a.click();
+    loadReportHistory();
+
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function loadUsers(){
+  const u=await api('/admin/users');
+
+  $('#ut').innerHTML=
+    '<tr><th>Username</th><th>Joined</th><th>Role</th><th>Access</th></tr>'+
+    u.map(x=>
+      `<tr><td><b>${x.username}</b></td><td>${x.created}</td><td><span class="pill ${x.role}">${x.role}</span></td><td><select onchange="setRole('${x.username}',this.value)" ${x.username===USER.username?'disabled':''}><option ${x.role==='admin'?'selected':''}>admin</option><option ${x.role==='user'?'selected':''}>user</option></select></td></tr>`
+    ).join('');
+}
+
+async function setRole(n,r){
+  try{
+    await api(`/admin/users/${encodeURIComponent(n)}/role?role=${r}`,{method:'POST'});
+    loadUsers();
+    loadActivity();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function loadActivity(){
+  const u=USER.role==='admin'
+    ?await api('/admin/activity')
+    :await api('/activity/me');
+
+  $('#at').innerHTML=USER.role==='admin'
+    ?'<tr><th>User</th><th>Role</th><th>Action</th><th>Dataset</th><th>Details</th><th>Time</th></tr>'
+    :'<tr><th>Action</th><th>Dataset</th><th>Details</th><th>Time</th></tr>';
+
+  $('#at').innerHTML+=u.map(x=>USER.role==='admin'
+    ?`<tr><td>${x.username}</td><td><span class="pill ${x.role}">${x.role}</span></td><td>${x.action}</td><td>${x.dataset||'—'}</td><td>${x.details||'—'}</td><td>${new Date(x.created).toLocaleString()}</td></tr>`
+    :`<tr><td>${x.action}</td><td>${x.dataset||'—'}</td><td>${x.details||'—'}</td><td>${new Date(x.created).toLocaleString()}</td></tr>`
+  ).join('');
+}
+
+// Restore login session if token exists
+(async()=>{
+  TOKEN=store.get('pp_t');
+
+  if(TOKEN){
+    try{
+      USER=await api('/auth/me');
+      start();
+    }catch{
+      store.set('pp_t','');
+      TOKEN='';
+    }
+  }
+})();
 </script>
 </body></html>
